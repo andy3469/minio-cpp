@@ -405,6 +405,46 @@ class Tests {
     }
   }
 
+  void GetObj() {
+    std::cout << "GetObj()" << std::endl;
+
+    std::string object_name = RandObjectName();
+
+    std::string data = "GetObj()";
+    std::stringstream ss(data);
+    minio::s3::PutObjectArgs args(ss, static_cast<long>(data.length()), 0);
+    args.bucket = bucket_name_;
+    args.object = object_name;
+    minio::s3::PutObjectResponse resp = client_.PutObject(args);
+    if (!resp) {
+      throw std::runtime_error("PutObject(): " + resp.Error().String());
+    }
+
+    try {
+      minio::s3::GetObjectArgs args;
+      args.bucket = bucket_name_;
+      args.object = object_name;
+      std::string content;
+      args.datafunc =
+          [&content = content](minio::http::DataFunctionArgs args) -> bool {
+        content += args.datachunk;
+        return true;
+      };
+      minio::s3::GetObjectResponse resp = client_.GetObj(args);
+      if (!resp) {
+        throw std::runtime_error("GetObj(): " + resp.Error().String());
+      }
+      if (data != content) {
+        throw std::runtime_error("GetObj(): expected: " + data +
+                                 "; got: " + content);
+      }
+      RemoveObject(bucket_name_, object_name);
+    } catch (const std::runtime_error&) {
+      RemoveObject(bucket_name_, object_name);
+      throw;
+    }
+  }
+
   void listObjects(std::string testname, int count) {
     std::cout << testname << std::endl;
 

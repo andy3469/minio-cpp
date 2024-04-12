@@ -31,6 +31,15 @@
 #include "response.h"
 #include "utils.h"
 
+#ifdef GetObject
+// see https://github.com/minio/minio-cpp/issues/134
+// a former included windows.h might have defined a macro called GetObject, which affects
+// GetObject defined here. This ensures the macro does not get applied
+#pragma push_macro("GetObject")
+#define MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#undef GetObject
+#endif
+
 namespace minio::s3 {
 
 utils::Multimap GetCommonListObjectsQueryParams(
@@ -114,6 +123,7 @@ class BaseClient {
   GetBucketTagsResponse GetBucketTags(GetBucketTagsArgs args);
   GetBucketVersioningResponse GetBucketVersioning(GetBucketVersioningArgs args);
   GetObjectResponse GetObject(GetObjectArgs args);
+  GetObjectResponse GetObj(GetObjectArgs args);
   GetObjectLockConfigResponse GetObjectLockConfig(GetObjectLockConfigArgs args);
   GetObjectRetentionResponse GetObjectRetention(GetObjectRetentionArgs args);
   GetObjectTagsResponse GetObjectTags(GetObjectTagsArgs args);
@@ -153,5 +163,10 @@ class BaseClient {
 };  // class BaseClient
 
 }  // namespace minio::s3
+
+#ifdef MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#pragma pop_macro("GetObject")
+#undef MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#endif
 
 #endif  // MINIO_CPP_BASECLIENT_H_INCLUDED

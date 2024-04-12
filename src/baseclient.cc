@@ -43,6 +43,15 @@
 #include "miniocpp/types.h"
 #include "miniocpp/utils.h"
 
+#ifdef GetObject
+// see https://github.com/minio/minio-cpp/issues/134
+// a former included windows.h might have defined a macro called GetObject, which affects
+// GetObject defined here. This ensures the macro does not get applied
+#pragma push_macro("GetObject")
+#define MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#undef GetObject
+#endif
+
 namespace minio::s3 {
 
 utils::Multimap GetCommonListObjectsQueryParams(
@@ -862,6 +871,39 @@ GetBucketVersioningResponse BaseClient::GetBucketVersioning(
 }
 
 GetObjectResponse BaseClient::GetObject(GetObjectArgs args) {
+  if (error::Error err = args.Validate()) {
+    return GetObjectResponse(err);
+  }
+
+  if (args.ssec != nullptr && !base_url_.https) {
+    return error::make<GetObjectResponse>(
+        "SSE-C operation must be performed over a secure connection");
+  }
+
+  std::string region;
+  if (GetRegionResponse resp = GetRegion(args.bucket, args.region)) {
+    region = resp.region;
+  } else {
+    return GetObjectResponse(resp);
+  }
+
+  Request req(http::Method::kGet, region, base_url_, args.extra_headers,
+              args.extra_query_params);
+  req.bucket_name = args.bucket;
+  req.object_name = args.object;
+  if (!args.version_id.empty()) {
+    req.query_params.Add("versionId", args.version_id);
+  }
+  req.datafunc = args.datafunc;
+  req.userdata = args.userdata;
+  req.progressfunc = args.progressfunc;
+  req.progress_userdata = args.progress_userdata;
+  if (args.ssec != nullptr) req.headers.AddAll(args.ssec->Headers());
+
+  return GetObjectResponse(Execute(req));
+}
+
+GetObjectResponse BaseClient::GetObj(GetObjectArgs args) {
   if (error::Error err = args.Validate()) {
     return GetObjectResponse(err);
   }
@@ -1958,3 +2000,9 @@ UploadPartCopyResponse BaseClient::UploadPartCopy(UploadPartCopyArgs args) {
 }
 
 }  // namespace minio::s3
+
+
+#ifdef MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#pragma pop_macro("GetObject")
+#undef MINIO_WINDOWS_GETOBJECT_WORKAROUND_APPLIED
+#endif
